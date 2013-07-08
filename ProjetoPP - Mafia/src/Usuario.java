@@ -16,6 +16,7 @@ public class Usuario extends Agent {
 	
 	private AID[] pessoas;
 	private int dinheiro = 1000;
+	private int reabilitacao = 10;
 	public void setup() {
 		//Adicionando usuário ao sistema
 		System.out.println("O usuário: " + getAID().getName()
@@ -50,27 +51,10 @@ public class Usuario extends Agent {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
+				addBehaviour(new respostasUsuario());
+				addBehaviour(new comprarDrogas());
 			}
 		});
-		
-		// Enviando mensagens de conversa
-				addBehaviour(new TickerBehaviour(this, 10000) {
-					protected void onTick() {
-						ACLMessage msg = new ACLMessage(ACLMessage.INFORM);
-						for (int i = 0; i < pessoas.length; ++i) {
-							msg.addReceiver(new AID(pessoas[i].getName(),
-									AID.ISLOCALNAME));
-						}
-						msg.setLanguage("Portuguese");
-						msg.setOntology("Procurar Drogas.");
-						msg.setContent("Cade o bagulho?");
-						send(msg);
-					}
-				});
-
-				
-
-
 	}
 	
 	public void takeDown(){
@@ -85,7 +69,7 @@ public class Usuario extends Agent {
 
 	}
 	
-	private class respostasPessoaComum extends CyclicBehaviour {
+	private class respostasUsuario extends CyclicBehaviour {
 
 		public void action() {
 			MessageTemplate mt = MessageTemplate
@@ -112,7 +96,7 @@ public class Usuario extends Agent {
 				}
 				//Recebe mensagem de outro Traficante
 				else if(title == "Eai mano, ta afim do bagulho?"){
-					reply.setPerformative(ACLMessage.REFUSE);
+					reply.setPerformative(ACLMessage.AGREE);
 					reply.setContent("Sou pessoa de bem");
 				}
 				myAgent.send(reply);
@@ -121,5 +105,77 @@ public class Usuario extends Agent {
 			}
 		}
 	}
-
+	private class comprarDrogas extends CyclicBehaviour {
+		private int repliesCnt = 0; // The counter of replies from seller agents
+		private MessageTemplate mt; // The template to receive replies
+		public void action() {
+	
+				ACLMessage order = new ACLMessage(ACLMessage.CFP);
+				ACLMessage cfp = new ACLMessage(ACLMessage.CFP);
+				for (int i = 0; i < pessoas.length; ++i) {
+					cfp.addReceiver(pessoas[i]);
+				} 
+				cfp.setContent("Cade o bagulho?");
+				cfp.setConversationId("Procurar Drogas.");
+				cfp.setReplyWith("cfp"+System.currentTimeMillis()); // Unique value
+				myAgent.send(cfp);
+				// Prepare the template to get proposals
+				mt = MessageTemplate.and(MessageTemplate.MatchConversationId("Procurar Drogas."),
+						MessageTemplate.MatchInReplyTo(cfp.getReplyWith()));
+			
+				// Receive all proposals/refusals from seller agents
+				ACLMessage reply = myAgent.receive(mt);
+				if (reply != null) {
+					// Reply received
+					if (reply.getPerformative() == ACLMessage.PROPOSE) {
+						// A resposta partiu de um policial
+						if(reabilitacao > 0){
+						reabilitacao--;
+						order.setPerformative(ACLMessage.AGREE);
+						order.addReceiver(reply.getSender());
+						order.setContent("Me recuperei, agora estou livre das drogas");
+						myAgent.send(order);
+						new PessoaComum();
+						takeDown();
+						}else{
+							order.setPerformative(ACLMessage.REFUSE);
+							order.addReceiver(reply.getSender());
+							order.setContent("Não, sai de perto");
+							myAgent.send(order);
+							
+						}
+					}else if(reply.getPerformative() == ACLMessage.FAILURE){
+						//Resposta partiu de um usuário
+						order.setPerformative(ACLMessage.AGREE);
+						order.addReceiver(reply.getSender());
+						order.setContent("Foi mal cara");
+						myAgent.send(order);
+					}else if(reply.getPerformative() == ACLMessage.AGREE){
+					if(dinheiro > 0){
+						dinheiro -= 100;
+						order.setPerformative(ACLMessage.AGREE);
+						order.addReceiver(reply.getSender());
+						order.setContent("Ta ai, 100 conto");
+						myAgent.send(order);
+					}else{
+						order.setPerformative(ACLMessage.AGREE);
+						order.addReceiver(reply.getSender());
+						order.setContent("Não me mata");
+						myAgent.send(order);
+						takeDown();
+					}
+					}
+				
+					repliesCnt++;
+					if (repliesCnt >= pessoas.length) {
+						// We received all replies
+					
+					}
+				}
+				else {
+					block();
+				}
+		}
+	
+	} 
 }
